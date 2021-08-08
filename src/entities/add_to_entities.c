@@ -13,7 +13,6 @@
 #include "unistd.h"
 #include "stdarg.h"
 
-
 static void add_between(entity_t *prev, entity_t *next, entity_t *entity)
 {
     entity->next = next;
@@ -37,8 +36,9 @@ void add_to_entities(game_t *game, entity_t *entity)
         return;
     }
     for (; c != NULL; c = c->next) {
-        if (c->z >= entity->z)
+        if (c->z >= entity->z) {
             break;
+        }
         prev = c;
     }
     add_between(prev, c, entity);

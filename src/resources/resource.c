@@ -8,56 +8,59 @@
 #include "distract/debug.h"
 #include "distract/game.h"
 #include "distract/resources.h"
+#include "distract/hashmap.h"
+#include "distract/util.h"
 #include "stdlib.h"
 
 int distract_util_strcmp(char const *s1, char const *s2);
 
 resource_t *create_resource(game_t *game, char *file, enum resource_type type)
 {
-    resource_t *resource = malloc(sizeof(resource_t));
+    resource_t *resource = dmalloc(sizeof(resource_t));
 
-    resource->prev = NULL;
-    resource->next = game->scene->resources;
+    if (resource == NULL) {
+        print_error("Failed to init resource");
+        return (NULL);
+    }
     resource->type = type;
-    resource->path = file;
-    if (resource->next != NULL)
-        resource->next->prev = resource;
-    game->scene->resources = resource;
+    resource->path = dstrdup(file);
+    if (resource->path == NULL) {
+        free(resource);
+        return (NULL);
+    }
+    if (hashmap_set(&game->scene->resources, resource->path, resource) < 0) {
+        free(resource);
+        print_error("Failed to set in hashmap resource");
+        return (NULL);
+    }
     return (resource);
 }
 
 resource_t *get_resource(game_t *game, char *file)
 {
-    resource_t *resource = game->scene->resources;
-
-    for (; resource != NULL; resource = resource->next) {
-        if (resource->path != NULL
-            && distract_util_strcmp(resource->path, file) == 0)
-                return (resource);
-    }
-    return (NULL);
+    return (hashmap_get(game->scene->resources, file));
 }
 
 void destroy_resource_asset(resource_t *resource)
 {
     switch(resource->type) {
-        case R_TEXTURE:
-            sfTexture_destroy(resource->texture);
+        case R_TEXTURE: SAFE_RESOURCE_DESTROY(sfTexture_destroy,
+            resource->texture);
             break;
-        case R_SOUND:
-            sfSound_destroy(resource->sound);
+        case R_SOUND: SAFE_RESOURCE_DESTROY(sfSound_destroy, resource->sound);
             break;
-        case R_SOUND_BUFFER:
-            sfSoundBuffer_destroy(resource->sound_buffer);
+        case R_SOUND_BUFFER: SAFE_RESOURCE_DESTROY(sfSoundBuffer_destroy,
+            resource->sound_buffer);
             break;
-        case R_MUSIC:
-            sfMusic_destroy(resource->music);
+        case R_MUSIC: SAFE_RESOURCE_DESTROY(sfMusic_destroy, resource->music);
             break;
-        case R_FONT:
-            sfFont_destroy(resource->font);
+        case R_FONT: SAFE_RESOURCE_DESTROY(sfFont_destroy, resource->font);
             break;
-        default:
-            print_error("Unknown asset");
+        case R_VERTEX: SAFE_RESOURCE_DESTROY(sfVertexArray_destroy,
+            resource->vao);
+            break;
+        default: print_error("Unknown asset");
+            break;
     }
 }
 
@@ -65,14 +68,10 @@ void destroy_resource(game_t *game, resource_t *resource)
 {
     if (resource == NULL)
         return;
-    if (resource->prev != NULL)
-        resource->prev->next = resource->next;
-    if (resource->next != NULL)
-        resource->next->prev = resource->prev;
-    if (game->scene->resources == resource) {
-        game->scene->resources = resource->next;
-    }
+    hashmap_unset(&game->scene->resources, resource->path);
     destroy_resource_asset(resource);
+    if (resource->path)
+        free(resource->path);
     free(resource);
 }
 
